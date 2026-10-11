@@ -11,6 +11,51 @@ from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/approvals", tags=["Approval Center"])
 
+# Role-based authorization matrix for sensitive state-changing actions.
+ACTION_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "FREEZE_ACCOUNT": {"compliance_officer", "compliance_manager", "manager"},
+    "UNFREEZE_ACCOUNT": {"compliance_officer", "compliance_manager", "manager"},
+    "HIGH_VALUE_TRANSFER": {"compliance_manager", "manager"},
+    "OVERRIDE_LOAN": {"compliance_manager", "manager"},
+    "POLICY_EXCEPTION": {"compliance_officer", "compliance_manager", "manager"},
+}
+DEFAULT_ALLOWED_ROLES: set[str] = {"compliance_manager", "manager"}
+
+
+def is_role_authorized(role: str | None, action_type: str) -> bool:
+    allowed = ACTION_ROLE_PERMISSIONS.get(action_type, DEFAULT_ALLOWED_ROLES)
+    return bool(role) and role.strip().lower() in allowed
+
+
+def get_pending_approval_or_error(db: Session, approval_id: str) -> ApprovalRequest:
+    """Fetch a PENDING approval, enforcing existence, status, and expiry."""
+    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id.upper()).first()
+    if not approval:
+        raise HTTPException(status_code=404, detail=f"Approval request '{approval_id}' not found.")
+
+    if approval.status != "PENDING":
+        raise HTTPException(status_code=400, detail=f"Cannot act on request with status '{approval.status}'.")
+
+    # Expiry enforcement: auto-expire stale requests before any decision is applied.
+    if approval.expires_at and approval.expires_at < datetime.utcnow():
+        approval.status = "EXPIRED"
+        approval.decision_reason = "Auto-expired: approval window elapsed before human decision."
+        approval.decision_at = datetime.utcnow()
+        approval.execution_result = json.dumps({"status": "EXPIRED_NOT_EXECUTED"})
+        db.commit()
+        audit_service.log_event(
+            correlation_id=approval.request_id,
+            actor="System",
+            event_type="APPROVAL_EXPIRED",
+            tool_name="expiry_enforcement",
+            details={"approval_id": approval.id, "action_type": approval.action_type, "expires_at": approval.expires_at.isoformat()},
+            status="ERROR",
+            db=db
+        )
+        raise HTTPException(status_code=410, detail="Approval request has expired and can no longer be actioned.")
+
+    return approval
+
 @router.get("")
 def list_approvals(
     status: str | None = None,
@@ -55,12 +100,7 @@ def approve_request(
     decision: ApprovalDecision,
     db: Session = Depends(get_db)
 ):
-    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id.upper()).first()
-    if not approval:
-        raise HTTPException(status_code=404, detail=f"Approval request '{approval_id}' not found.")
-
-    if approval.status != "PENDING":
-        raise HTTPException(status_code=400, detail=f"Cannot approve request with status '{approval.status}'.")
+    approval = get_pending_approval_or_error(db, approval_id)
 
     # Cryptographic Hash & Tamper Validation
     payload_dict = json.loads(approval.payload)
@@ -76,6 +116,22 @@ def approve_request(
             db=db
         )
         raise HTTPException(status_code=400, detail="Security violation: Action payload hash does not match stored snapshot.")
+
+    # Role-based authorization: only privileged roles may approve sensitive actions.
+    if not is_role_authorized(decision.approver_role, approval.action_type):
+        audit_service.log_event(
+            correlation_id=approval.request_id,
+            actor=decision.approver_role,
+            event_type="APPROVAL_PERMISSION_DENIED",
+            tool_name="approve_request",
+            details={"approval_id": approval.id, "action_type": approval.action_type, "role": decision.approver_role},
+            status="ERROR",
+            db=db
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role '{decision.approver_role}' is not authorized to approve action '{approval.action_type}'."
+        )
 
     # Execute simulated state-changing action
     try:
@@ -114,12 +170,7 @@ def reject_request(
     decision: ApprovalDecision,
     db: Session = Depends(get_db)
 ):
-    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id.upper()).first()
-    if not approval:
-        raise HTTPException(status_code=404, detail=f"Approval request '{approval_id}' not found.")
-
-    if approval.status != "PENDING":
-        raise HTTPException(status_code=400, detail=f"Cannot reject request with status '{approval.status}'.")
+    approval = get_pending_approval_or_error(db, approval_id)
 
     approval.status = "REJECTED"
     approval.decision_by = decision.approver_role

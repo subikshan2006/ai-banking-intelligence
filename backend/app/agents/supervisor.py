@@ -1,6 +1,7 @@
 import time
 import uuid
 import json
+import inspect
 import logging
 from datetime import datetime
 from typing import Any
@@ -77,15 +78,18 @@ class SupervisorAgent:
                 structured_data={"clarification_prompt": parsed.clarification_prompt}
             )
 
-        # Step 2: Build Workflow Plan
+        # Step 2: Build Workflow Plan (LLM-proposed & validated when configured, else deterministic)
         plan_start = time.perf_counter()
-        tasks = self._build_workflow_plan(parsed, corr_id)
+        tasks = await self._propose_plan_via_llm(message, corr_id)
+        plan_source = "llm" if tasks is not None else "deterministic"
+        if tasks is None:
+            tasks = self._build_workflow_plan(parsed, corr_id)
         trace.append(ExecutionTraceItem(
             step_id=f"STEP-{len(trace)+1}",
             phase="PLANNING",
             agent_name="SupervisorAgent",
-            input_data={"intent": parsed.intent, "entities": parsed.entities},
-            output_data={"task_count": len(tasks), "tasks": [f"{t.task_id} -> {t.agent_name}.{t.action}" for t in tasks]},
+            input_data={"intent": parsed.intent, "entities": parsed.entities, "llm_configured": llm_service.is_configured},
+            output_data={"plan_source": plan_source, "task_count": len(tasks), "tasks": [f"{t.task_id} -> {t.agent_name}.{t.action}" for t in tasks]},
             status="SUCCESS",
             duration_ms=round((time.perf_counter() - plan_start) * 1000.0, 2),
             timestamp=datetime.utcnow().isoformat()
@@ -207,10 +211,28 @@ class SupervisorAgent:
             status="SUCCESS" if not errors else "PARTIAL_SUCCESS"
         )
 
+        # Step 5: Optional LLM natural-language synthesis over grounded tool results
+        execution_mode = "llm" if plan_source == "llm" else "deterministic_fallback"
+        synth_start = time.perf_counter()
+        llm_answer = await self._synthesize_answer_via_llm(message=message, intent=parsed.intent, structured=structured_out)
+        if llm_answer:
+            final_answer = llm_answer
+            execution_mode = "llm"
+        trace.append(ExecutionTraceItem(
+            step_id=f"STEP-{len(trace)+1}",
+            phase="AGGREGATION",
+            agent_name="SupervisorAgent",
+            input_data={"llm_configured": llm_service.is_configured, "structured_keys": list(structured_out.keys())},
+            output_data={"answer_source": "llm" if llm_answer else "deterministic", "execution_mode": execution_mode},
+            status="SUCCESS",
+            duration_ms=round((time.perf_counter() - synth_start) * 1000.0, 2),
+            timestamp=datetime.utcnow().isoformat()
+        ))
+
         return ChatResponse(
             correlation_id=corr_id,
             intent=parsed.intent,
-            execution_mode="deterministic_fallback" if not llm_service.is_configured else "llm",
+            execution_mode=execution_mode,
             status="completed" if not errors else "failed",
             answer=final_answer,
             agents_involved=agents_involved,
@@ -219,6 +241,112 @@ class SupervisorAgent:
             errors=errors,
             structured_data=structured_out
         )
+
+    def _agent_action_map(self) -> dict[str, list[str]]:
+        """Enumerate the callable actions each registered agent exposes (for plan validation)."""
+        mapping: dict[str, list[str]] = {}
+        for name, agent in self.agents_map.items():
+            actions = [
+                member for member, _ in inspect.getmembers(agent, predicate=inspect.ismethod)
+                if not member.startswith("_") and member not in ("execute_tool", "execute_task")
+            ]
+            mapping[name] = sorted(actions)
+        return mapping
+
+    async def _propose_plan_via_llm(self, message: str, correlation_id: str) -> list[TaskStep] | None:
+        """Ask the LLM for a JSON execution plan for complex requests; validate before use."""
+        if not llm_service.is_configured:
+            return None
+
+        action_map = self._agent_action_map()
+        system_prompt = (
+            "You are a banking multi-agent workflow planner. Propose a JSON execution plan using ONLY "
+            "the agents and actions listed below. Reply with strict JSON of the form "
+            '{"tasks":[{"task_id":"T1","agent_name":"...","action":"...","arguments":{...},"dependencies":["T1"]}]}. '
+            f"Available agents/actions: {json.dumps(action_map)}. "
+            f"Use at most {settings.MAX_WORKFLOW_STEPS} tasks. Reference only task_ids declared earlier. "
+            "Do not include commentary, markdown, or code fences."
+        )
+        raw = await llm_service.generate_response(system_prompt, message, temperature=0.0, max_tokens=800)
+        return self._validate_llm_plan(raw, action_map)
+
+    def _validate_llm_plan(self, raw: str | None, action_map: dict[str, list[str]]) -> list[TaskStep] | None:
+        """Validate an LLM-proposed plan against the agent/action allow-list. Returns None if invalid."""
+        if not raw or not raw.strip():
+            return None
+
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`").strip()
+            if text.lower().startswith("json"):
+                text = text[4:].strip()
+
+        try:
+            data = json.loads(text)
+        except Exception:
+            logger.warning("LLM plan rejected: response was not valid JSON.")
+            return None
+
+        tasks_raw = data.get("tasks") if isinstance(data, dict) else None
+        if not isinstance(tasks_raw, list) or not tasks_raw:
+            return None
+        if len(tasks_raw) > settings.MAX_WORKFLOW_STEPS:
+            logger.warning("LLM plan rejected: exceeds MAX_WORKFLOW_STEPS.")
+            return None
+
+        seen_ids: set[str] = set()
+        tasks: list[TaskStep] = []
+        for item in tasks_raw:
+            if not isinstance(item, dict):
+                return None
+            task_id = item.get("task_id")
+            agent_name = item.get("agent_name")
+            action = item.get("action")
+            arguments = item.get("arguments", {}) or {}
+            dependencies = item.get("dependencies", []) or []
+
+            if not task_id or task_id in seen_ids:
+                return None
+            if agent_name not in action_map or action not in action_map[agent_name]:
+                logger.warning(f"LLM plan rejected: unsupported agent/action '{agent_name}.{action}'.")
+                return None
+            if not isinstance(dependencies, list) or any(dep not in seen_ids for dep in dependencies):
+                return None
+            if not isinstance(arguments, dict):
+                return None
+
+            seen_ids.add(task_id)
+            tasks.append(TaskStep(
+                task_id=task_id,
+                agent_name=agent_name,
+                action=action,
+                arguments=arguments,
+                dependencies=dependencies
+            ))
+
+        return tasks
+
+    async def _synthesize_answer_via_llm(self, message: str, intent: str, structured: dict[str, Any]) -> str | None:
+        """Produce a grounded natural-language answer from structured tool results, or None to fall back."""
+        if not llm_service.is_configured or not structured:
+            return None
+
+        system_prompt = (
+            "You are a professional banking operations assistant. Using ONLY the structured tool results "
+            "provided, answer the user's request clearly in Markdown. Never invent customers, accounts, "
+            "amounts, or policies. Omit fields that are absent. Be concise and factual."
+        )
+        context = json.dumps(structured, default=str)[:8000]
+        user_message = f"User request: {message}\n\nStructured tool results (JSON):\n{context}"
+
+        answer = await llm_service.generate_response(system_prompt, user_message, temperature=0.2, max_tokens=1000)
+        if not answer or not answer.strip():
+            return None
+        answer = answer.strip()
+        if len(answer) > 12000:
+            logger.warning("LLM answer rejected: exceeds maximum length.")
+            return None
+        return answer
 
     def _build_workflow_plan(self, parsed: ParsedIntent, correlation_id: str) -> list[TaskStep]:
         intent = parsed.intent

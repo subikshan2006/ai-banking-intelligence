@@ -10,8 +10,9 @@ class SimulatorWebSocket {
       return;
     }
 
-    try {
-      this.ws = new WebSocket("ws://localhost:8000/ws/simulator");
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = (import.meta as any).env?.VITE_WS_URL || `${protocol}//${window.location.host}/ws/simulator`;
+      this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         // console.log("Connected to simulator WebSocket");

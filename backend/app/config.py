@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
 
+    # Auth / JWT
+    JWT_SECRET: str = "dev-secret-change-me-in-production"
+    JWT_EXPIRY_HOURS: int = 12
+
     # Operational & Security
     DEMO_ROLE: str = "manager"
     SIMULATION_INTERVAL_SECONDS: int = 4

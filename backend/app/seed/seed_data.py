@@ -16,6 +16,8 @@ from app.models.approval import ApprovalRequest
 from app.models.policy import PolicyDocument
 from app.models.notification import Notification
 from app.models.audit import AuditEvent
+from app.models.user import User
+from app.services.security import hash_password
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "services", "models")
 POLICIES_DIR = os.path.join(os.path.dirname(__file__), "policies")
@@ -54,6 +56,20 @@ def train_and_save_isolation_forest(transactions: list[dict]):
     joblib.dump(iso_forest, model_path)
     return iso_forest
 
+def seed_users(db):
+    """Seed demo users idempotently (independent of the main data seed skip)."""
+    users_seed = [
+        ("USR1001", "manager", "Branch Manager (Demo)", "manager", "Manager@123"),
+        ("USR1002", "risk_analyst", "Risk Analyst (Demo)", "risk_analyst", "Risk@123"),
+        ("USR1003", "compliance_officer", "Compliance Officer (Demo)", "compliance_officer", "Compliance@123"),
+    ]
+    for uid, username, display_name, role, password in users_seed:
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            continue
+        db.add(User(id=uid, username=username, display_name=display_name, role=role, password_hash=hash_password(password)))
+    db.flush()
+
 def seed_database(force_reset: bool = False):
     """Seed synthetic banking data idempotently."""
     if force_reset:
@@ -62,6 +78,10 @@ def seed_database(force_reset: bool = False):
 
     db = SessionLocal()
     try:
+        # Demo users are always ensured (independent seed, idempotent by username).
+        seed_users(db)
+        db.commit()
+
         # Check if already seeded
         existing_customers = db.query(Customer).count()
         if existing_customers >= 15 and not force_reset:

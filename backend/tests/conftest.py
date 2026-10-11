@@ -35,3 +35,23 @@ def setup_test_database():
 def client():
     with TestClient(app) as c:
         yield c
+
+@pytest.fixture
+def auth_headers(client):
+    """Log in as a seeded demo user and return Bearer auth headers for that role."""
+    passwords = {
+        "manager": "Manager@123",
+        "risk_analyst": "Risk@123",
+        "compliance_officer": "Compliance@123",
+    }
+    cache = {}
+
+    def _get(role: str) -> dict:
+        if role in cache:
+            return cache[role]
+        resp = client.post("/api/auth/login", json={"username": role, "password": passwords[role]})
+        assert resp.status_code == 200, resp.text
+        cache[role] = {"Authorization": f"Bearer {resp.json()['token']}"}
+        return cache[role]
+
+    return _get

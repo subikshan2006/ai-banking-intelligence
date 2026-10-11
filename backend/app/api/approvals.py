@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.approval import ApprovalRequest
+from app.models.user import User
 from app.schemas.approvals import ApprovalDecision, ApprovalResponse
 from app.tools.approval_tools import compute_payload_hash, execute_action_by_type
 from app.services.audit_service import audit_service
@@ -98,6 +100,7 @@ def list_approvals(
 def approve_request(
     approval_id: str,
     decision: ApprovalDecision,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     approval = get_pending_approval_or_error(db, approval_id)
@@ -108,7 +111,7 @@ def approve_request(
     if recalculated_hash != approval.payload_hash:
         audit_service.log_event(
             correlation_id=approval.request_id,
-            actor=decision.approver_role,
+            actor=user.username,
             event_type="APPROVAL_TAMPER_DETECTED",
             tool_name="approve_request",
             details={"approval_id": approval.id, "error": "Payload hash mismatch"},
@@ -118,19 +121,19 @@ def approve_request(
         raise HTTPException(status_code=400, detail="Security violation: Action payload hash does not match stored snapshot.")
 
     # Role-based authorization: only privileged roles may approve sensitive actions.
-    if not is_role_authorized(decision.approver_role, approval.action_type):
+    if not is_role_authorized(user.role, approval.action_type):
         audit_service.log_event(
             correlation_id=approval.request_id,
-            actor=decision.approver_role,
+            actor=user.username,
             event_type="APPROVAL_PERMISSION_DENIED",
             tool_name="approve_request",
-            details={"approval_id": approval.id, "action_type": approval.action_type, "role": decision.approver_role},
+            details={"approval_id": approval.id, "action_type": approval.action_type, "role": user.role},
             status="ERROR",
             db=db
         )
         raise HTTPException(
             status_code=403,
-            detail=f"Role '{decision.approver_role}' is not authorized to approve action '{approval.action_type}'."
+            detail=f"Role '{user.role}' is not authorized to approve action '{approval.action_type}'."
         )
 
     # Execute simulated state-changing action
@@ -140,7 +143,7 @@ def approve_request(
         raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")
 
     approval.status = "APPROVED"
-    approval.decision_by = decision.approver_role
+    approval.decision_by = user.role
     approval.decision_reason = decision.decision_reason
     approval.decision_at = datetime.utcnow()
     approval.execution_result = json.dumps(execution_res)
@@ -148,7 +151,7 @@ def approve_request(
 
     audit_service.log_event(
         correlation_id=approval.request_id,
-        actor=decision.approver_role,
+        actor=user.username,
         event_type="APPROVAL_DECIDED",
         tool_name="approve_request",
         details={"approval_id": approval.id, "decision": "APPROVED", "result": execution_res},
@@ -168,12 +171,13 @@ def approve_request(
 def reject_request(
     approval_id: str,
     decision: ApprovalDecision,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     approval = get_pending_approval_or_error(db, approval_id)
 
     approval.status = "REJECTED"
-    approval.decision_by = decision.approver_role
+    approval.decision_by = user.role
     approval.decision_reason = decision.decision_reason
     approval.decision_at = datetime.utcnow()
     approval.execution_result = json.dumps({"status": "REJECTED_BY_APPROVER"})
@@ -181,7 +185,7 @@ def reject_request(
 
     audit_service.log_event(
         correlation_id=approval.request_id,
-        actor=decision.approver_role,
+        actor=user.username,
         event_type="APPROVAL_DECIDED",
         tool_name="reject_request",
         details={"approval_id": approval.id, "decision": "REJECTED", "reason": decision.decision_reason},

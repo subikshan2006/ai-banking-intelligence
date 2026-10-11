@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Landmark,
   ShieldAlert,
@@ -6,13 +6,15 @@ import {
   Play,
   Square,
   Sparkles,
+  LogOut,
   UserCheck
 } from 'lucide-react';
 import { Notification } from '../../types';
+import { AuthUser } from '../../services/api';
 
 interface NavbarProps {
-  demoRole: string;
-  setDemoRole: (role: string) => void;
+  user: AuthUser | null;
+  onLogout: () => void;
   isSimulatorRunning: boolean;
   onToggleSimulator: () => void;
   onGenerateDemoTx: () => void;
@@ -21,8 +23,8 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  demoRole,
-  setDemoRole,
+  user,
+  onLogout,
   isSimulatorRunning,
   onToggleSimulator,
   onGenerateDemoTx,
@@ -85,20 +87,25 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Inject Demo Tx</span>
         </button>
 
-        {/* Demo Role Selector */}
-        <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-          <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-[11px] text-slate-400">Role:</span>
-          <select
-            value={demoRole}
-            onChange={(e) => setDemoRole(e.target.value)}
-            className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
-          >
-            <option value="manager" className="bg-slate-900 text-white">Branch Manager</option>
-            <option value="risk_analyst" className="bg-slate-900 text-white">Risk Analyst</option>
-            <option value="compliance_officer" className="bg-slate-900 text-white">Compliance Officer</option>
-          </select>
-        </div>
+        {/* Signed-in User & Role */}
+        {user && (
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
+            <div className="w-6 h-6 rounded-full bg-teal-500/20 border border-teal-500/40 flex items-center justify-center">
+              <UserCheck className="w-3.5 h-3.5 text-teal-400" />
+            </div>
+            <div className="leading-tight">
+              <div className="text-xs text-white font-semibold capitalize">{user.role.replace('_', ' ')}</div>
+              <div className="text-[10px] text-slate-500">{user.username}</div>
+            </div>
+            <button
+              onClick={onLogout}
+              className="ml-1 p-1.5 rounded-md text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 transition"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Notifications Bell */}
         <button

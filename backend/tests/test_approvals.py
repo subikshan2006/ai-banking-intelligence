@@ -11,7 +11,7 @@ def test_list_approvals(client):
     assert data["total"] >= 1
     assert len(data["approvals"]) >= 1
 
-def test_approve_pending_freeze_account(client):
+def test_approve_pending_freeze_account(client, auth_headers):
     db = get_task_session()
     try:
         # Create a fresh pending approval request
@@ -32,10 +32,11 @@ def test_approve_pending_freeze_account(client):
         db.merge(appr)
         db.commit()
 
-        # Approve it via endpoint
+        # Approve it via endpoint as authenticated manager
         response = client.post(
             f"/api/approvals/{appr.id}/approve",
-            json={"decision": "APPROVED", "decision_reason": "Verified suspicious activity with cardholder", "approver_role": "compliance_manager"}
+            json={"decision": "APPROVED", "decision_reason": "Verified suspicious activity with cardholder", "approver_role": "compliance_manager"},
+            headers=auth_headers("manager")
         )
         assert response.status_code == 200
         assert response.json()["status"] == "APPROVED"
@@ -46,7 +47,7 @@ def test_approve_pending_freeze_account(client):
     finally:
         db.close()
 
-def test_tamper_payload_hash_rejected(client):
+def test_tamper_payload_hash_rejected(client, auth_headers):
     db = get_task_session()
     try:
         payload = {"account_id": "ACC2004", "customer_id": "CUST1003"}
@@ -68,7 +69,8 @@ def test_tamper_payload_hash_rejected(client):
 
         response = client.post(
             f"/api/approvals/{appr.id}/approve",
-            json={"decision": "APPROVED", "decision_reason": "Attempting approval", "approver_role": "manager"}
+            json={"decision": "APPROVED", "decision_reason": "Attempting approval", "approver_role": "manager"},
+            headers=auth_headers("manager")
         )
         assert response.status_code == 400
         assert "hash does not match" in response.json()["detail"].lower()

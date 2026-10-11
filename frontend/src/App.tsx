@@ -14,20 +14,29 @@ import { ApprovalCenterPage } from './pages/ApprovalCenterPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { AuditExplorerPage } from './pages/AuditExplorerPage';
 import { EvaluationPage } from './pages/EvaluationPage';
+import { LoginPage } from './pages/LoginPage';
 
-import { api } from './services/api';
+import { api, AuthUser } from './services/api';
 import { simulatorWs } from './services/websocket';
 import { Notification } from './types';
 import { Bell, CheckCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    api.restoreToken();
+    return api.getStoredUser();
+  });
   const [demoRole, setDemoRole] = useState<string>('manager');
   const [isSimulatorRunning, setIsSimulatorRunning] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(1);
   const [openAlertsCount, setOpenAlertsCount] = useState<number>(4);
+
+  useEffect(() => {
+    if (user) setDemoRole(user.role);
+  }, [user]);
 
   useEffect(() => {
     // Initial fetch
@@ -101,6 +110,16 @@ export const App: React.FC = () => {
     setActiveTab('assistant');
   };
 
+  const handleLogout = () => {
+    api.logout();
+    setUser(null);
+    setDemoRole('manager');
+  };
+
+  if (!user) {
+    return <LoginPage onLogin={setUser} />;
+  }
+
   return (
     <div className="min-h-screen bg-navy-950 text-slate-100 flex flex-col font-sans selection:bg-teal-500 selection:text-navy-950">
       {/* Top Simulation Warning Banner */}
@@ -108,8 +127,8 @@ export const App: React.FC = () => {
 
       {/* Main Navbar */}
       <Navbar
-        demoRole={demoRole}
-        setDemoRole={setDemoRole}
+        user={user}
+        onLogout={handleLogout}
         isSimulatorRunning={isSimulatorRunning}
         onToggleSimulator={handleToggleSimulator}
         onGenerateDemoTx={handleGenerateDemoTx}

@@ -1,12 +1,34 @@
 const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "/api";
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  created_at: string;
+}
+
+let accessToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  accessToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return accessToken;
+}
+
 export async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options?.headers as Record<string, string>) || {})
+  };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {})
-    },
-    ...options
+    ...options,
+    headers
   });
   if (!res.ok) {
     let errorDetail = res.statusText;
@@ -14,12 +36,45 @@ export async function fetchJson<T>(url: string, options?: RequestInit): Promise<
       const err = await res.json();
       errorDetail = err.detail || JSON.stringify(err);
     } catch (_) {}
-    throw new Error(errorDetail);
+    const error: any = new Error(errorDetail);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
 
 export const api = {
+  // Auth
+  login: async (username: string, password: string): Promise<AuthUser> => {
+    const data = await fetchJson<{ token: string; token_type: string; user: AuthUser }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+    accessToken = data.token;
+    localStorage.setItem("nexus_token", data.token);
+    localStorage.setItem("nexus_user", JSON.stringify(data.user));
+    return data.user;
+  },
+  logout: () => {
+    accessToken = null;
+    localStorage.removeItem("nexus_token");
+    localStorage.removeItem("nexus_user");
+  },
+  getMe: () => fetchJson<AuthUser>("/auth/me"),
+  getStoredUser: (): AuthUser | null => {
+    try {
+      const raw = localStorage.getItem("nexus_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  },
+  restoreToken: () => {
+    const stored = localStorage.getItem("nexus_token");
+    if (stored) accessToken = stored;
+    return stored;
+  },
+
   // Dashboard
   getDashboardSummary: () => fetchJson<any>("/dashboard/summary"),
 

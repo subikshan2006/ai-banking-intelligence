@@ -13,6 +13,7 @@ from app.api.simulator import router as simulator_router
 from app.api.audit import router as audit_router
 from app.api.notifications import router as notifications_router
 from app.api.evaluation import router as evaluation_router
+from app.api.auth import router as auth_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -30,3 +31,4 @@ api_router.include_router(simulator_router)
 api_router.include_router(audit_router)
 api_router.include_router(notifications_router)
 api_router.include_router(evaluation_router)
+api_router.include_router(auth_router)

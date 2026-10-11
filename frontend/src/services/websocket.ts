@@ -10,6 +10,7 @@ class SimulatorWebSocket {
       return;
     }
 
+    try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = (import.meta as any).env?.VITE_WS_URL || `${protocol}//${window.location.host}/ws/simulator`;
       this.ws = new WebSocket(wsUrl);

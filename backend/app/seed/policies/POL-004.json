@@ -1,0 +1,18 @@
+{
+  "id": "POL-004",
+  "title": "Fraud Investigation & Incident Escalation Procedure",
+  "category": "Operations",
+  "version": "v2.0",
+  "effective_date": "2026-02-15",
+  "content": "Fraud Investigation Protocol: When a transaction is flagged with a Risk Score of 70 or above, an automated investigation ticket is generated. The Risk Analyst must inspect the customer's prior 90-day spending history, merchant geolocation, and device fingerprints. If evidence indicates credential stuffing or account takeover, a simulated account freeze request must be submitted through the Approval Center. Actions affecting customer funds or account access require documented manager sign-off with an audit log record.",
+  "passages": [
+    {
+      "id": "POL-004-P1",
+      "text": "Escalation guidelines: Transactions with Risk Score >= 70 require immediate analyst review. If unauthorized access is suspected, the analyst creates an Approval Request to freeze the account."
+    },
+    {
+      "id": "POL-004-P2",
+      "text": "Auditing requirements: All investigative steps, agent tool executions, and approval decisions must be permanently written to the immutable audit trail with correlation IDs."
+    }
+  ]
+}

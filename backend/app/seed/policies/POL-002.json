@@ -1,0 +1,18 @@
+{
+  "id": "POL-002",
+  "title": "Transaction Monitoring & Anti-Money Laundering (AML) SOP",
+  "category": "Fraud & AML",
+  "version": "v3.0",
+  "effective_date": "2026-01-15",
+  "content": "Transaction Monitoring Standards: Financial transactions are monitored in real time using automated rule engines and experimental anomaly detection heuristics. Any transaction exceeding ₹200,000 or greater than 3 times the customer's typical historical amount triggers an automated investigation alert. Consecutive transactions executed within 5 minutes totaling over ₹50,000 trigger a velocity flag. Flagged transactions are placed in an investigation review queue. Customer accounts showing continuous anomalous patterns may be recommended for temporary transaction restrictions pending compliance officer sign-off.",
+  "passages": [
+    {
+      "id": "POL-002-P1",
+      "text": "Unusual transactions policy: Single transactions exceeding ₹200,000 or 3 times the historical baseline must be flagged for fraud and AML review. Velocity triggers activate when multiple transfers occur within a 5-minute interval."
+    },
+    {
+      "id": "POL-002-P2",
+      "text": "Account restrictions: When severe suspicious activity or repeated failed payment attempts are detected, agents must submit an Approval Request before freezing or restricting any customer account."
+    }
+  ]
+}

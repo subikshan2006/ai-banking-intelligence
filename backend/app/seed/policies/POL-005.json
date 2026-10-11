@@ -1,0 +1,18 @@
+{
+  "id": "POL-005",
+  "title": "High-Velocity Transfer Friction & Velocity Controls Policy",
+  "category": "Fraud & AML",
+  "version": "v1.2",
+  "effective_date": "2026-03-01",
+  "content": "Velocity Controls Policy: Rapid successive outgoing transfers from a retail account represent elevated risk for malware drain and mule accounts. If more than 3 transactions occur within 10 minutes, or if identical amount transfers occur within 5 minutes, step-up two-factor simulation is engaged. Transactions failing step-up checks are automatically aborted with status FAILED and recorded in the Fraud Center.",
+  "passages": [
+    {
+      "id": "POL-005-P1",
+      "text": "Rapid transfer rules: Executing more than 3 transactions within 10 minutes or identical amount charges within 5 minutes triggers velocity friction controls and an automatic High severity alert."
+    },
+    {
+      "id": "POL-005-P2",
+      "text": "Duplicate charges: Duplicate transaction attempts within a 5-minute window are marked as Potential Duplicate Payment and require operator validation."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "POL-003",
+  "title": "Customer Due Diligence (CDD) & KYC Verification Checklist",
+  "category": "KYC & Compliance",
+  "version": "v1.4",
+  "effective_date": "2026-02-01",
+  "content": "Know Your Customer (KYC) Requirements: Every customer account requires identity verification through government-approved credentials (Aadhaar, PAN, Passport). Customers with PENDING status are restricted to basic savings accounts with monthly withdrawal limits not exceeding ₹50,000 and cannot apply for loans or credit cards. Full verification requires validated address proof and biometric or video KYC completion. Periodic re-KYC reviews occur every 24 months for medium risk profiles and every 12 months for high risk profiles.",
+  "passages": [
+    {
+      "id": "POL-003-P1",
+      "text": "KYC verification checklist: Required documents include Government ID proof, Address verification, and PAN card. Customers with PENDING KYC are prohibited from receiving retail loan disbursement or overdraft facilities."
+    },
+    {
+      "id": "POL-003-P2",
+      "text": "Re-verification schedule: High-risk customer profiles undergo mandatory annual compliance review. Unresolved documentation discrepancies within 30 days trigger simulated operational freeze warnings."
+    }
+  ]
+}

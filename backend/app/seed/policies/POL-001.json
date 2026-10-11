@@ -1,0 +1,18 @@
+{
+  "id": "POL-001",
+  "title": "Retail Loan Eligibility & Debt-to-Income Limits Policy",
+  "category": "Lending",
+  "version": "v2.1",
+  "effective_date": "2026-01-01",
+  "content": "Retail Loan Eligibility Guidelines: All personal and retail loan applicants must undergo credit risk assessment and debt-to-income (DTI) evaluation. Applicants with existing DTI below 40% qualify for standard prime rates starting at 10.5% per annum. Applicants with DTI between 40% and 50% require additional income verification and manager review. Any loan application that results in a projected DTI exceeding 50% is classified as High Risk and must not be approved without executive committee exception. Applicants must have fully verified KYC status. Minimum tenure is 6 months and maximum tenure is 84 months.",
+  "passages": [
+    {
+      "id": "POL-001-P1",
+      "text": "Retail loan eligibility requires DTI below 40% for standard prime rates (10.5% p.a.). Projected DTI between 40% and 50% requires manager review. Projected DTI exceeding 50% is classified as High Risk and is subject to committee exception."
+    },
+    {
+      "id": "POL-001-P2",
+      "text": "Mandatory loan criteria: Applicant must hold verified KYC status, have at least 6 months of verifiable employment history, and requested tenure must be between 6 and 84 months."
+    }
+  ]
+}

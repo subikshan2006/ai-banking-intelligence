@@ -205,21 +205,27 @@ npm run dev
 
 A self-contained desktop build (backend + frontend + SQLite + ML model bundled in a single PyInstaller executable) is available:
 
-1. Double-click `NexusBankingAI-Desktop.exe` (or run the provided `NexusBankingAI-Setup.exe` installer).
-2. A console opens and the browser loads `http://127.0.0.1:8765`.
+1. Double-click `NexusBankingAI-Desktop.exe` (or run `NexusBankingAI-Setup.exe` to install it).
+2. The whole platform opens **inside its own desktop window** (WebView2/Edge) — no browser tab, no visible server.
 3. Sign in with the demo accounts above.
 
-Build from source:
+Requires Windows 10/11 (the embedded window uses the built-in Microsoft Edge WebView2 runtime).
+
+Build from source (run from `backend/`):
 
 ```bash
-cd backend
-pip install pyinstaller
-pyinstaller --noconfirm --clean --onefile --name NexusBankingAIPlatform \
+pip install -r requirements.txt pyinstaller pywebview
+pyinstaller --noconfirm --clean --onefile --windowed --name NexusBankingAIPlatform \
   --add-data "app;app" \
   --add-data ".env;." \
+  --collect-all webview \
   --exclude-module pandas --exclude-module matplotlib \
   standalone_main.py
 ```
+
+`standalone_main.py` starts the FastAPI service on `127.0.0.1:8765` and launches the
+bundled `app/standalone_web` (`npm run build` output) in a desktop `webview` window.
+Closing the window stops the platform.
 
 ---
 
